@@ -12,7 +12,7 @@ $ npm run build
 
 预渲染实现原理其实不难，对于一个普通的 vue spa 应用，打包后的 html 页面其实只包含了基本的 html、body 等元素，然后引入一个 js。我们可以用 puppeteer 去打开这个页面（以前是 phantomjs），然后用它的 `page.content()` api 获取的 html 代码代替原始的打包后的代码
 
-我们可以手动去 dist 目录下做这个事情，prerender-spa-plugin 这个 webpack 的 plugin 帮助我们自动做完了这个事情，它会默认打开 express 作为 server，然后用 puppeteer 去抓页面，然后根据路由生成静态页面
+我们可以手动去 dist 目录下做这个事情，prerender-spa-plugin 这个 webpack 的 plugin 帮助我们自动做完了这个事情，它会默认在 dist 下用 express 作为 server（就能打开页面），然后用 puppeteer 去抓页面，然后根据路由生成静态页面
 
 和原始的 vue spa 相比，修改的代码并不是很多
 
@@ -57,7 +57,7 @@ new Vue({
 
 ## 应用场景和局限性
 
-比较适合静态页面。比如我要开发几个静态页面，用 vue 上手比较快，但是又要考虑 seo，就可以用这个方式解决
+比较适合静态页面。比如我要开发几个静态页面，用 vue 上手比较快，但是又要考虑 seo 或者考虑弱网条件，就可以用这个方式解决
 
 局限性主要在以下几个场景：
 
@@ -66,4 +66,38 @@ new Vue({
 * 经常发生变化的页面，数据实时性展示（比如体育比赛等）。预渲染会让你的页面显示不正确直到脚本加载完成并替换成新的数据，这是一个不好的用户体验
 * 动态数据页面，即不同的用户需要看到不同的数据，比如 /my-profile 页
 
+另外，关于体验上，如果是像 demo 一样用 vue 做静态页面，体验还是不错的（尽管拼接生成元素的 js 还是会执行，但是因为执行前后的内容一致，所以并没有感觉），如果是做异步请求的预渲染，举个例子比如有这样一个 .vue 文件：
 
+```vue
+<template>
+  <div id="app">
+    <ul>
+      <li v-for="item in list" :key="item.id"><a :href="item.url">{{ item.title }}</a></li>
+    </ul>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'app',
+  data () {
+    return {
+      list: []
+    }
+  },
+  created() {
+    fetch('/api/topics/hot.json')
+      .then(res => res.json())
+      .then(data => {
+        this.list = data
+      })
+  }
+}
+</script>
+```
+
+如果我们对它做了预渲染，接口请求到的数据是会渲染到 html 上的，所以一开始我们是有数据的，然后运行 js，一开始 list 是空数组，于是数据又没了，然后又请求接口，数据又有了，于是就有一个 有->没有->有 的过程，会出现一闪的情况。唯一的好处是 seo 的问题解决了
+
+所以对于这样的异步请求数据，个人建议不使用预渲染
+
+**个人觉得预渲染就适合做静态页面**
