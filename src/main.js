@@ -6,5 +6,9 @@ Vue.config.productionTip = false
 
 new Vue({
   router,
-  render: function (h) { return h(App) }
+  render: function (h) { return h(App) },
+  mounted () {
+    // You'll need this for renderAfterDocumentEvent.
+    document.dispatchEvent(new Event('render-event'))
+  }
 }).$mount('#app')
