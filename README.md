@@ -10,6 +10,8 @@ $ npm run build
 
 ## 实现原理
 
+**用 prerender-spa-plugin 实现预渲染并不仅仅适用于 vue，事实上，适用于任何页面**
+
 预渲染实现原理其实不难，对于一个普通的 vue spa 应用，打包后的 html 页面其实只包含了基本的 html、body 等元素，然后引入一个 js。我们可以用 puppeteer 去打开这个页面（以前是 phantomjs），然后用它的 `page.content()` api 获取的 html 代码代替原始的打包后的代码
 
 我们可以手动去 dist 目录下做这个事情，prerender-spa-plugin 这个 webpack 的 plugin 帮助我们自动做完了这个事情，它会默认在 dist 下用 express 作为 server（就能打开页面），然后用 puppeteer 去抓页面，然后根据路由生成静态页面
@@ -96,7 +98,44 @@ export default {
 </script>
 ```
 
-如果我们对它做了预渲染，接口请求到的数据是会渲染到 html 上的，所以一开始我们是有数据的，然后运行 js，一开始 list 是空数组，于是数据又没了，然后又请求接口，数据又有了，于是就有一个 有->没有->有 的过程，会出现一闪的情况。唯一的好处是 seo 的问题解决了
+如果我们对它做了预渲染，接口请求到的数据是会渲染到 html 上的，所以一开始我们是有数据的，然后运行 js，vue 开始初始化，一开始 list 是空数组，于是页面数据又没了，然后又请求接口，数据又有了，于是就有一个 有->没有->有 的过程。唯一的好处是 seo 的问题解决了，另外如果弱网条件下迟迟加载不了 js，数据也是可以显示的
+
+实际测试中，大多看到的是 没有->有 这个过程，因为 有->没有 这个过程太快了。我们可以模拟弱网情况，就能看到这个过程
+
+突然想到仿佛有个 [injectProperty](https://github.com/chrisvfritz/prerender-spa-plugin#prerendererrenderer-puppeteer-options) 选项可以在环境中插入值，可以看下 [这个 demo](https://github.com/chrisvfritz/prerender-spa-plugin/tree/master/examples/vanilla-simple)
+
+于是修改配置：
+
+```js
+renderer: new Renderer({
+  // Optional - The name of the property to add to the window object with the contents of `inject`.
+  injectProperty: '__PRERENDER_INJECTED',
+  // Optional - Any values you'd like your app to have access to via `window.injectProperty`.
+  inject: {
+    foo: 'bar'
+  },
+  headless: false,
+  renderAfterDocumentEvent: 'render-event'
+})
+```
+
+理想中是在 js 中根据 window['__PRERENDER_INJECTED'] 去判断是否进行异步请求的操作，但是在 js 中打印它都是 undefined，此法失败
+
+看了下代码：
+
+```js
+if (options.inject) {
+  await page.evaluateOnNewDocument(`(function () { window['${options.injectProperty}'] = ${JSON.stringify(options.inject)}; })();`)
+}
+```
+
+也就是说配置了这个选项，在 puppeteer 去抓取页面的时候，会在上下文中执行以上代码（也就是插入 window['__PRERENDER_INJECTED'] 值），如果代码中有以下这样操作：
+
+```js
+document.body.innerHTML += `<p>Injected: ${JSON.stringify(window['__PRERENDER_INJECTED'])}</p>`
+```
+
+这是会生效的，因为 puppeteer 会抓取 html 代码，反之如果是在 js 里判断这个值，它只存在 puppeteer 打开的上下文中
 
 所以对于这样的异步请求数据，个人建议不使用预渲染
 
