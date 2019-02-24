@@ -139,4 +139,4 @@ document.body.innerHTML += `<p>Injected: ${JSON.stringify(window['__PRERENDER_IN
 
 所以对于这样的异步请求数据，个人建议不使用预渲染
 
-**个人觉得预渲染就适合做静态页面**
+**个人觉得预渲染就适合做静态页面**，比如一些营销页面
